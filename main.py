@@ -1,56 +1,48 @@
 import streamlit as st
 import requests
+from bs4 import BeautifulSoup
+import urllib.parse
 
-# TMDB API 키를 입력하세요 (https://www.themoviedb.org/ 에서 발급 가능)
-TMDB_API_KEY = 'YOUR_TMDB_API_KEY_HERE'
-
-# 영화 검색 함수
-def search_movie(title):
-    url = f"https://api.themoviedb.org/3/search/movie"
-    params = {
-        'api_key': TMDB_API_KEY,
-        'query': title,
-        'language': 'ko-KR'
+# 네이버 영화 검색 함수
+def get_movie_info_naver(query):
+    search_url = f"https://movie.naver.com/movie/search/result.naver?query={urllib.parse.quote(query)}&section=all&ie=utf8"
+    headers = {
+        "User-Agent": "Mozilla/5.0"
     }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        results = response.json().get('results', [])
-        if results:
-            return results[0]  # 첫 번째 결과 반환
+    response = requests.get(search_url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # 첫 번째 영화 정보 추출
+    result = soup.select_one("ul.search_list_1 li")
+
+    if result:
+        title = result.select_one(".result_thumb strong").text.strip()
+        link = "https://movie.naver.com" + result.select_one("a")["href"]
+        img = result.select_one("img")["src"]
+        info_text = result.select_one(".result_info").text.strip()
+        return {
+            "title": title,
+            "link": link,
+            "img": img,
+            "info": info_text
+        }
     return None
 
-# 포스터 URL 생성 함수
-def get_poster_url(poster_path):
-    if poster_path:
-        return f"https://image.tmdb.org/t/p/w500{poster_path}"
-    return None
+# Streamlit UI
+st.set_page_config(page_title="네이버 영화 검색기", page_icon="🎬")
+st.title("🎬 네이버 영화 검색기")
 
-# Streamlit UI 구성
-st.set_page_config(page_title="영화 정보 검색기", page_icon="🎬")
-st.title("🎬 영화 정보 검색기")
+query = st.text_input("🔍 영화 제목을 입력하세요:")
 
-movie_title = st.text_input("🔍 영화 제목을 입력하세요:")
-
-if movie_title:
-    with st.spinner("영화 정보를 검색 중입니다..."):
-        movie = search_movie(movie_title)
+if query:
+    with st.spinner("네이버 영화에서 정보를 가져오는 중..."):
+        movie = get_movie_info_naver(query)
 
     if movie:
-        st.success(f"\"{movie['title']}\" 검색 성공!")
-
-        # 포스터
-        poster_url = get_poster_url(movie.get('poster_path'))
-        if poster_url:
-            st.image(poster_url, use_column_width=True)
-
-        # 영화 기본 정보
-        st.subheader("📄 줄거리")
-        st.write(movie.get('overview', '줄거리 정보가 없습니다.'))
-
-        st.subheader("📅 개봉일")
-        st.write(movie.get('release_date', '정보 없음'))
-
-        st.subheader("⭐ 평점")
-        st.write(f"{movie.get('vote_average', 0)} / 10")
+        st.success(f"✅ \"{movie['title']}\" 검색 성공!")
+        st.image(movie["img"], width=300)
+        st.subheader("📌 영화 정보")
+        st.write(movie["info"])
+        st.markdown(f"[🔗 네이버 영화 상세보기]({movie['link']})")
     else:
-        st.error("❌ 영화를 찾을 수 없습니다. 다른 제목을 입력해보세요.")
+        st.error("❌ 결과를 찾을 수 없습니다. 다른 제목을 입력해보세요.")
